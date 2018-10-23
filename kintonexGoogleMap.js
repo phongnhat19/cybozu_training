@@ -13,6 +13,8 @@
     directionsService: null,
     map: null,
     buildDistanceMaxtrixPath: function(data) {
+      data.origin = encodeURI(data.origin);
+      data.destination = encodeURI(data.destination)
       return 'maps/api/distancematrix/json?origins=' + data.origin + '&destinations=' + data.destination + '&key=' + GoogleMap.key;
     },
     buildGoogleMapURL: function(data) {
@@ -71,11 +73,9 @@
       GoogleMap.drawRoute(routeOptions);
     },
     getLocationData: function(record) {
-      var shippingAddress = encodeURI(record.address.value);
-      var originAddress = encodeURI(record.store_address.value);
       return {
-        origin: originAddress,
-        destination: shippingAddress
+        origin: record.store_address.value,
+        destination: record.address.value
       };
     },
     calculatePrice: function(event, locationData) {
