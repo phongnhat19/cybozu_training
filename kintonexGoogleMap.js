@@ -14,7 +14,7 @@
     map: null,
     buildDistanceMaxtrixPath: function(data) {
       data.origin = encodeURI(data.origin);
-      data.destination = encodeURI(data.destination)
+      data.destination = encodeURI(data.destination);
       return 'maps/api/distancematrix/json?origins=' + data.origin + '&destinations=' + data.destination + '&key=' + GoogleMap.key;
     },
     buildGoogleMapURL: function(data) {
@@ -32,9 +32,8 @@
         }
       });
     },
-    init: function(apiKey) {
+    appendGoogleMapScriptTag: function() {
       var scriptElem = document.createElement('script');
-      GoogleMap.key = apiKey;
       scriptElem.setAttribute('src', 'https://maps.googleapis.com/maps/api/js?key=' + GoogleMap.key);
       scriptElem.setAttribute('async', '');
       scriptElem.setAttribute('defer', '');
@@ -43,6 +42,10 @@
         GoogleMap.directionsService = new google.maps.DirectionsService();
       };
       document.head.appendChild(scriptElem);
+    },
+    init: function(apiKey) {
+      GoogleMap.key = apiKey;
+      GoogleMap.appendGoogleMapScriptTag();
     }
   };
 
@@ -58,17 +61,20 @@
     HTTP_STATUS_SUCCESS: 200,
     TRAVEL_MODE: 'DRIVING',
     DEFAULT_SHIPPING_PRICE: 0,
+    getRouteOptions: function(record) {
+      return {
+        origin: record.store_address.value,
+        destination: record.address.value,
+        travelMode: handleKintoneEvent.TRAVEL_MODE
+      };
+    },
     handleShowEvent: function(event) {
       var record = event.record;
       var blankSpaceForMap = kintone.app.record.getSpaceElement('map');
       var mapOptions = {
         zoom: 14
       };
-      var routeOptions = {
-        origin: record.store_address.value,
-        destination: record.address.value,
-        travelMode: handleKintoneEvent.TRAVEL_MODE
-      };
+      var routeOptions = GoogleMap.getRouteOptions(record);
       GoogleMap.renderMap(blankSpaceForMap, mapOptions);
       GoogleMap.drawRoute(routeOptions);
     },
@@ -78,25 +84,23 @@
         destination: record.address.value
       };
     },
+    calculatePriceFromDistance: function(resultFromGoogleAPI, event) {
+      var shippingPrice = parseInt(event.record.store_shipping_price.value, 10);
+      if (resultFromGoogleAPI.status === 'OK') {
+        event.record.price.value = (resultFromGoogleAPI.rows[0].elements[0].distance.value / 1000) * shippingPrice;
+      } else {
+        event.record.price.value = 0;
+      }
+      event.record.price.value = Math.ceil((event.record.price.value) / 1000) * 1000;
+      return event;
+    },
     calculatePrice: function(event, locationData) {
       var resultFromGoogleAPI;
-      var shippingPrice = handleKintoneEvent.DEFAULT_SHIPPING_PRICE;
-      try {
-        shippingPrice = parseInt(event.record.store_shipping_price.value, 10);
-      } catch (error) {
-        event.error = 'Price must be number';
-      }
       return kintone.proxy(GoogleMap.buildGoogleMapURL(locationData), 'GET', {}, {})
         .then(function(response) {
           if (response[1] === handleKintoneEvent.HTTP_STATUS_SUCCESS) {
             resultFromGoogleAPI = JSON.parse(response[0]);
-            if (resultFromGoogleAPI.status === 'OK') {
-              event.record.price.value = (resultFromGoogleAPI.rows[0].elements[0].distance.value / 1000) * shippingPrice;
-            } else {
-              event.record.price.value = 0;
-            }
-            event.record.price.value = Math.ceil((event.record.price.value) / 1000) * 1000;
-            return event;
+            return handleKintoneEvent.calculatePriceFromDistance(resultFromGoogleAPI, event);
           }
           return event;
         })
