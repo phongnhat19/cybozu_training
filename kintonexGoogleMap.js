@@ -74,7 +74,7 @@
       var mapOptions = {
         zoom: 14
       };
-      var routeOptions = GoogleMap.getRouteOptions(record);
+      var routeOptions = handleKintoneEvent.getRouteOptions(record);
       GoogleMap.renderMap(blankSpaceForMap, mapOptions);
       GoogleMap.drawRoute(routeOptions);
     },
