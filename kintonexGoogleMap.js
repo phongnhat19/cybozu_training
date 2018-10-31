@@ -212,8 +212,7 @@
         }
       });
     },
-    handleShowShipperMap: function(event) {
-      var viewType = event.viewType;
+    handleShowShipperMap: function() {
       var mapOptions = {
         zoom: 12,
         center: {lat: handleKintoneEvent.DEFAULT_LAT, lng: handleKintoneEvent.DEFAULT_LAT},
@@ -221,29 +220,28 @@
       };
       var isMarker = false;
       var mapContainer;
-      if (viewType === 'custom') {
-        mapContainer = document.getElementById(handleKintoneEvent.SHIPPER_MAP_ID);
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(function(position) {
-            mapOptions.center = {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude
-            };
-            GoogleMap.renderMap(mapContainer, mapOptions);
-            handleKintoneEvent.fetchRecords(kintone.app.getId()).then(function(records) {
-              records.forEach(function(record) {
-                handleKintoneEvent.listenForLocationFromFirebase(record.$id.value, isMarker);
-              });
-            });
-          });
-        } else {
+      mapContainer = document.getElementById(handleKintoneEvent.SHIPPER_MAP_ID);
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(position) {
+          mapOptions.center = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
           GoogleMap.renderMap(mapContainer, mapOptions);
+
           handleKintoneEvent.fetchRecords(kintone.app.getId()).then(function(records) {
             records.forEach(function(record) {
               handleKintoneEvent.listenForLocationFromFirebase(record.$id.value, isMarker);
             });
           });
-        }
+        });
+      } else {
+        GoogleMap.renderMap(mapContainer, mapOptions);
+        handleKintoneEvent.fetchRecords(kintone.app.getId()).then(function(records) {
+          records.forEach(function(record) {
+            handleKintoneEvent.listenForLocationFromFirebase(record.$id.value, isMarker);
+          });
+        });
       }
     },
     handleShowEvent: function(event) {
@@ -312,11 +310,14 @@
       return e;
     },
     init: function() {
+      var customMapContainer = document.getElementById(handleKintoneEvent.SHIPPER_MAP_ID);
       GoogleFirebase.init(GOOGLE_API_KEY, DATABASE_NAME, DOCUMENT_GROUP);
       GoogleMap.init(GOOGLE_API_KEY, function() {
         kintone.events.on(handleKintoneEvent.SHOW_EVENT_LIST, handleKintoneEvent.handleShowEvent);
         kintone.events.on(handleKintoneEvent.SUBMIT_EVENT_LIST, handleKintoneEvent.handleSubmitEvent);
-        kintone.events.on(handleKintoneEvent.SHOW_SHIPPER_MAP_EVENT_LIST, handleKintoneEvent.handleShowShipperMap);
+        if (customMapContainer) {
+          handleKintoneEvent.handleShowShipperMap();
+        }
         kintone.events.on(handleKintoneEvent.SUBMIT_SUCCESS_EVENT_LIST, handleKintoneEvent.handleSubmitSuccessEvent);
       });
     }
