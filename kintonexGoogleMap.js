@@ -230,28 +230,29 @@
       };
       var isMarker = false;
       var mapContainer;
-      mapContainer = document.getElementById(handleKintoneEvent.SHIPPER_MAP_ID);
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(function(position) {
-          mapOptions.center = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          };
-          GoogleMap.renderMap(mapContainer, mapOptions);
+      var showShipperPromise = new kintone.Promise(function(resolve, reject) {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(function(position) {
+            mapOptions.center = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            };
+            resolve(mapOptions);
+          });
+        } else {
+          resolve(mapOptions);
+        }
+      })
+        .then(function(options) {
+          mapContainer = document.getElementById(handleKintoneEvent.SHIPPER_MAP_ID);
+          GoogleMap.renderMap(mapContainer, options);
           handleKintoneEvent.fetchRecords(kintone.app.getId()).then(function(records) {
             records.forEach(function(record) {
               handleKintoneEvent.listenForLocationFromFirebase(record.$id.value, isMarker);
             });
           });
         });
-      } else {
-        GoogleMap.renderMap(mapContainer, mapOptions);
-        handleKintoneEvent.fetchRecords(kintone.app.getId()).then(function(records) {
-          records.forEach(function(record) {
-            handleKintoneEvent.listenForLocationFromFirebase(record.$id.value, isMarker);
-          });
-        });
-      }
+      kintone.Promise.all([showShipperPromise]);
     },
     handleShowEvent: function(event) {
       var record = event.record;
