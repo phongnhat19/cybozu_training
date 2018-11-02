@@ -64,6 +64,11 @@
         GoogleMap.shipperMarker[shipperID] = new google.maps.Marker({position: shipperLocation, map: GoogleMap.map, label: 'S' + shipperID});
       }
     },
+    removeShipperMarker: function(shipperID) {
+      if (GoogleMap.shipperMarker[shipperID]) {
+        GoogleMap.shipperMarker[shipperID].setMap(null);
+      }
+    },
     showMarker: function(locationData) {
       if (GoogleMap.marker) {
         GoogleMap.marker.setPosition(locationData);
@@ -127,7 +132,7 @@
       };
       document.head.appendChild(scriptElem);
     },
-    listen: function(orderID, callback) {
+    listenForOrderDocumentChange: function(orderID, callback) {
       var recordURL = GoogleFirebase.documentGroup + '/' + orderID;
       var dbRef = firebase.database().ref(recordURL);
       dbRef.on('value', function(snapshot) {
@@ -140,7 +145,8 @@
       var recordURL = GoogleFirebase.documentGroup + '/' + orderID;
       delete event.record.location;
       return firebase.database().ref(recordURL).set({
-        location: locationData
+        location: locationData,
+        status: handleKintoneEvent.STATUS_PENDING
       }).then(function(res) {
         return event;
       }).catch(function(err) {
@@ -179,6 +185,8 @@
     DEFAULT_SHIPPING_PRICE: 0,
     DEFAULT_LAT: 10.776530,
     DEFAULT_LNG: 106.700981,
+    STATUS_SHIPPING: 'Shipping',
+    STATUS_PENDING: 'Pending',
     getRouteOptions: function(record) {
       return {
         origin: record.store_address.value,
@@ -200,15 +208,17 @@
       });
     },
     listenForLocationFromFirebase: function(recordID, isMarker) {
-      GoogleFirebase.listen(recordID, function(snapshot) {
+      GoogleFirebase.listenForOrderDocumentChange(recordID, function(snapshot) {
         var location = null;
         if (snapshot) {
           location = snapshot.location;
         }
         if (isMarker) {
           GoogleMap.showMarker(location);
-        } else {
+        } else if (snapshot.status === handleKintoneEvent.STATUS_SHIPPING) {
           GoogleMap.showShipperMarker(recordID, location);
+        } else {
+          GoogleMap.removeShipperMarker(recordID);
         }
       });
     },
@@ -228,7 +238,6 @@
             lng: position.coords.longitude
           };
           GoogleMap.renderMap(mapContainer, mapOptions);
-
           handleKintoneEvent.fetchRecords(kintone.app.getId()).then(function(records) {
             records.forEach(function(record) {
               handleKintoneEvent.listenForLocationFromFirebase(record.$id.value, isMarker);
@@ -289,15 +298,8 @@
     },
     handleSubmitSuccessEvent: function(event) {
       return GoogleMap.getLocationFromAddress(event)
-        .then(function(e) {
-          return GoogleFirebase.setLocation(e)
-            .then(function(eLocation) {
-              return eLocation;
-            }).catch(function(err) {
-              event.error = err;
-              return event;
-            });
-        }).catch(function(err) {
+        .then(GoogleFirebase.setLocation)
+        .catch(function(err) {
           event.error = err;
           return event;
         });
@@ -314,7 +316,7 @@
       GoogleMap.init(GOOGLE_API_KEY, function() {
         kintone.events.on(handleKintoneEvent.SHOW_EVENT_LIST, handleKintoneEvent.handleShowEvent);
         kintone.events.on(handleKintoneEvent.SUBMIT_EVENT_LIST, handleKintoneEvent.handleSubmitEvent);
-        kintone.events.on(handleKintoneEvent.SHOW_SHIPPER_MAP_EVENT_LIST, handleKintoneEvent.handleShowShipperMap)
+        kintone.events.on(handleKintoneEvent.SHOW_SHIPPER_MAP_EVENT_LIST, handleKintoneEvent.handleShowShipperMap);
         kintone.events.on(handleKintoneEvent.SUBMIT_SUCCESS_EVENT_LIST, handleKintoneEvent.handleSubmitSuccessEvent);
       });
     }
