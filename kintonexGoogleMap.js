@@ -84,24 +84,27 @@
         });
       }
     },
-    appendGoogleMapScriptTag: function(callback) {
-      var scriptElem = document.createElement('script');
-      scriptElem.setAttribute('src', 'https://maps.googleapis.com/maps/api/js?key=' + GoogleMap.key);
-      scriptElem.setAttribute('async', '');
-      scriptElem.setAttribute('defer', '');
-      scriptElem.onload = function() {
-        GoogleMap.directionsDisplay = new google.maps.DirectionsRenderer();
-        GoogleMap.directionsService = new google.maps.DirectionsService();
-        GoogleMap.markerIcon = {
-          url: 'https://images.vexels.com/media/users/3/138300/isolated/lists/a4509596c30df0dbb4ff437948691fdb-transport-icon-bike.png',
-          scaledSize: new google.maps.Size(25, 25),
-          size: new google.maps.Size(71, 71)
+    appendGoogleMapScriptTag: function() {
+      return new kintone.Promise(function(resolve, reject) {
+        var scriptElem = document.createElement('script');
+        scriptElem.setAttribute('src', 'https://maps.googleapis.com/maps/api/js?key=' + GoogleMap.key);
+        scriptElem.setAttribute('async', '');
+        scriptElem.setAttribute('defer', '');
+        scriptElem.onload = function() {
+          GoogleMap.directionsDisplay = new google.maps.DirectionsRenderer();
+          GoogleMap.directionsService = new google.maps.DirectionsService();
+          GoogleMap.markerIcon = {
+            url: 'https://images.vexels.com/media/users/3/138300/isolated/lists/a4509596c30df0dbb4ff437948691fdb-transport-icon-bike.png',
+            scaledSize: new google.maps.Size(25, 25),
+            size: new google.maps.Size(71, 71)
+          };
+          resolve(scriptElem);
         };
-        if (callback) {
-          callback();
-        }
-      };
-      document.head.appendChild(scriptElem);
+        scriptElem.onerror = function(error) {
+          resolve(error);
+        };
+        document.head.appendChild(scriptElem);
+      });
     },
     getBrowserLocation: function() {
       return new kintone.Promise(function(resolve, reject) {
@@ -117,13 +120,9 @@
         }
       });
     },
-    init: function(apiKey, callback) {
+    init: function(apiKey) {
       GoogleMap.key = apiKey;
-      GoogleMap.appendGoogleMapScriptTag(function() {
-        if (callback) {
-          callback();
-        }
-      });
+      return GoogleMap.appendGoogleMapScriptTag()
     }
   };
 
@@ -154,11 +153,13 @@
       };
       document.head.appendChild(scriptElem);
     },
-    listenForOrderDocumentChange: function(orderID, callback) {
-      var recordURL = GoogleFirebase.documentGroup + '/' + orderID;
-      var dbRef = firebase.database().ref(recordURL);
-      dbRef.on('value', function(snapshot) {
-        callback(snapshot.val());
+    listenForOrderDocumentChange: function(orderID) {
+      return new kintone.Promise(function(resolve, reject) {
+        var recordURL = GoogleFirebase.documentGroup + '/' + orderID;
+        var dbRef = firebase.database().ref(recordURL);
+        dbRef.on('value', function(snapshot) {
+          resolve(snapshot.val());
+        });
       });
     },
     setLocation: function(event) {
@@ -230,19 +231,20 @@
       });
     },
     listenForLocationFromFirebase: function(recordID, isMarker) {
-      GoogleFirebase.listenForOrderDocumentChange(recordID, function(snapshot) {
-        var location = null;
-        if (snapshot) {
-          location = snapshot.location;
-        }
-        if (isMarker) {
-          GoogleMap.showMarker(location);
-        } else if (snapshot.status === handleKintoneEvent.STATUS_SHIPPING) {
-          GoogleMap.showShipperMarker(recordID, location);
-        } else {
-          GoogleMap.removeShipperMarker(recordID);
-        }
-      });
+      GoogleFirebase.listenForOrderDocumentChange(recordID)
+        .then(function(snapshot) {
+          var location = null;
+          if (snapshot) {
+            location = snapshot.location;
+          }
+          if (isMarker) {
+            GoogleMap.showMarker(location);
+          } else if (snapshot.status === handleKintoneEvent.STATUS_SHIPPING) {
+            GoogleMap.showShipperMarker(recordID, location);
+          } else {
+            GoogleMap.removeShipperMarker(recordID);
+          }
+        });
     },
     handleShowShipperMap: function(event) {
       var mapOptions = {
@@ -332,12 +334,16 @@
     },
     init: function() {
       GoogleFirebase.init(GOOGLE_API_KEY, DATABASE_NAME, DOCUMENT_GROUP);
-      GoogleMap.init(GOOGLE_API_KEY, function() {
-        kintone.events.on(handleKintoneEvent.SHOW_EVENT_LIST, handleKintoneEvent.handleShowEvent);
-        kintone.events.on(handleKintoneEvent.SUBMIT_EVENT_LIST, handleKintoneEvent.handleSubmitEvent);
-        kintone.events.on(handleKintoneEvent.SHOW_SHIPPER_MAP_EVENT_LIST, handleKintoneEvent.handleShowShipperMap);
-        kintone.events.on(handleKintoneEvent.SUBMIT_SUCCESS_EVENT_LIST, handleKintoneEvent.handleSubmitSuccessEvent);
-      });
+      GoogleMap.init(GOOGLE_API_KEY)
+        .then(function() {
+          kintone.events.on(handleKintoneEvent.SHOW_EVENT_LIST, handleKintoneEvent.handleShowEvent);
+          kintone.events.on(handleKintoneEvent.SUBMIT_EVENT_LIST, handleKintoneEvent.handleSubmitEvent);
+          kintone.events.on(handleKintoneEvent.SHOW_SHIPPER_MAP_EVENT_LIST, handleKintoneEvent.handleShowShipperMap);
+          kintone.events.on(handleKintoneEvent.SUBMIT_SUCCESS_EVENT_LIST, handleKintoneEvent.handleSubmitSuccessEvent);
+        })
+        .catch(function(error) {
+
+        });
     }
   };
 
