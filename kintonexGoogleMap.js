@@ -61,7 +61,11 @@
       if (GoogleMap.shipperMarker[shipperID]) {
         GoogleMap.shipperMarker[shipperID].setPosition(shipperLocation);
       } else {
-        GoogleMap.shipperMarker[shipperID] = new google.maps.Marker({position: shipperLocation, map: GoogleMap.map, label: 'S' + shipperID});
+        GoogleMap.shipperMarker[shipperID] = new google.maps.Marker({
+          position: shipperLocation,
+          map: GoogleMap.map,
+          label: 'S' + shipperID
+        });
       }
     },
     removeShipperMarker: function(shipperID) {
@@ -73,7 +77,11 @@
       if (GoogleMap.marker) {
         GoogleMap.marker.setPosition(locationData);
       } else {
-        GoogleMap.marker = new google.maps.Marker({position: locationData, map: GoogleMap.map, label: 'S'});
+        GoogleMap.marker = new google.maps.Marker({
+          position: locationData,
+          map: GoogleMap.map,
+          label: 'S'
+        });
       }
     },
     appendGoogleMapScriptTag: function(callback) {
@@ -94,6 +102,20 @@
         }
       };
       document.head.appendChild(scriptElem);
+    },
+    getBrowserLocation: function() {
+      return new kintone.Promise(function(resolve, reject) {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(function(position) {
+            resolve({
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            });
+          });
+        } else {
+          reject('NO PERMISSION');
+        }
+      });
     },
     init: function(apiKey, callback) {
       GoogleMap.key = apiKey;
@@ -222,7 +244,7 @@
         }
       });
     },
-    handleShowShipperMap: function() {
+    handleShowShipperMap: function(event) {
       var mapOptions = {
         zoom: 12,
         center: {lat: handleKintoneEvent.DEFAULT_LAT, lng: handleKintoneEvent.DEFAULT_LAT},
@@ -230,29 +252,27 @@
       };
       var isMarker = false;
       var mapContainer;
-      var showShipperPromise = new kintone.Promise(function(resolve, reject) {
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(function(position) {
-            mapOptions.center = {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude
-            };
-            resolve(mapOptions);
-          });
-        } else {
-          resolve(mapOptions);
-        }
-      })
-        .then(function(options) {
+      GoogleMap.getBrowserLocation()
+        .then(function(locationData) {
+          mapOptions.center = {
+            lat: locationData.lat,
+            lng: locationData.lng
+          };
           mapContainer = document.getElementById(handleKintoneEvent.SHIPPER_MAP_ID);
-          GoogleMap.renderMap(mapContainer, options);
-          handleKintoneEvent.fetchRecords(kintone.app.getId()).then(function(records) {
-            records.forEach(function(record) {
-              handleKintoneEvent.listenForLocationFromFirebase(record.$id.value, isMarker);
-            });
+          GoogleMap.renderMap(mapContainer, mapOptions);
+        })
+        .then(function() {
+          return handleKintoneEvent.fetchRecords(kintone.app.getId());
+        })
+        .then(function(records) {
+          records.forEach(function(record) {
+            handleKintoneEvent.listenForLocationFromFirebase(record.$id.value, isMarker);
           });
+        })
+        .catch(function(error) {
+          event.error = error;
+          return event;
         });
-      kintone.Promise.all([showShipperPromise]);
     },
     handleShowEvent: function(event) {
       var record = event.record;
@@ -306,11 +326,9 @@
         });
     },
     handleSubmitEvent: function(event) {
-      var e = event;
-      var record = e.record;
+      var record = event.record;
       var locationData = handleKintoneEvent.getLocationData(record);
-      e = handleKintoneEvent.calculatePrice(e, locationData);
-      return e;
+      return handleKintoneEvent.calculatePrice(event, locationData);
     },
     init: function() {
       GoogleFirebase.init(GOOGLE_API_KEY, DATABASE_NAME, DOCUMENT_GROUP);
