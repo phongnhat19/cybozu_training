@@ -8,6 +8,28 @@
   var FIREBASE_DOCUMENT_GROUP = 'shipperLocation';
 
   // ------------------
+  var util = {
+    loadJSScript: function(url, options) {
+      return new kintone.Promise(function(resolve, reject) {
+        var scriptElem = document.createElement('script');
+        scriptElem.setAttribute('src', url);
+        if (typeof options === 'object') {
+          Object.keys(options).forEach(function(key) {
+            scriptElem.setAttribute(key, options[key]);
+          });
+        }
+        scriptElem.onload = function() {
+          resolve(scriptElem);
+        };
+        scriptElem.onerror = function(error) {
+          resolve(error);
+        };
+        document.head.appendChild(scriptElem);
+      });
+    }
+  };
+
+  // ------------------
   var GoogleMap = {
     key: '',
     GOOGLE_API_ENDPOINT: 'https://maps.googleapis.com/',
@@ -83,12 +105,11 @@
       }
     },
     appendGoogleMapScriptTag: function() {
-      return new kintone.Promise(function(resolve, reject) {
-        var scriptElem = document.createElement('script');
-        scriptElem.setAttribute('src', 'https://maps.googleapis.com/maps/api/js?key=' + GoogleMap.key);
-        scriptElem.setAttribute('async', '');
-        scriptElem.setAttribute('defer', '');
-        scriptElem.onload = function() {
+      return util.loadJSScript('https://maps.googleapis.com/maps/api/js?key=' + GoogleMap.key, {
+        async: '',
+        defer: ''
+      })
+        .then(function(scriptElem) {
           GoogleMap.directionsDisplay = new google.maps.DirectionsRenderer();
           GoogleMap.directionsService = new google.maps.DirectionsService();
           GoogleMap.markerIcon = {
@@ -96,15 +117,21 @@
             scaledSize: new google.maps.Size(25, 25),
             size: new google.maps.Size(71, 71)
           };
-          resolve(scriptElem);
-        };
-        scriptElem.onerror = function(error) {
-          resolve(error);
-        };
-        document.head.appendChild(scriptElem);
+        })
+        .catch(function(error) {
+          
+        });
+    },
+    buildMapOption: function(locationData) {
+      return new kintone.Promise(function(resolve, reject) {
+        resolve({
+          zoom: 12,
+          center: {lat: locationData.lat, lng: locationData.lng},
+          mapTypeControl: true
+        });
       });
     },
-    getBrowserLocation: function() {
+    getBrowserLocation: function(defaultLocation) {
       return new kintone.Promise(function(resolve, reject) {
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(function(position) {
@@ -114,13 +141,13 @@
             });
           });
         } else {
-          reject('NO PERMISSION');
+          resolve(defaultLocation);
         }
       });
     },
     init: function(apiKey) {
       GoogleMap.key = apiKey;
-      return GoogleMap.appendGoogleMapScriptTag()
+      return GoogleMap.appendGoogleMapScriptTag();
     }
   };
 
@@ -132,24 +159,18 @@
     documentGroup: '',
     API_STATUS_OK_TEXT: 'OK',
     appendFirebaseDatabaseScriptTab: function() {
-      var databaseScriptElem = document.createElement('script');
-      databaseScriptElem.setAttribute('src', 'https://www.gstatic.com/firebasejs/5.5.6/firebase-database.js');
-      databaseScriptElem.onload = function() {
-        var config = {
-          apiKey: GoogleFirebase.key,
-          databaseURL: GoogleFirebase.databaseURL,
-        };
-        firebase.initializeApp(config);
-      };
-      document.head.appendChild(databaseScriptElem);
+      return util.loadJSScript('https://www.gstatic.com/firebasejs/5.5.6/firebase-database.js',{})
+        .then(function(scriptElem) {
+          var config = {
+            apiKey: GoogleFirebase.key,
+            databaseURL: GoogleFirebase.databaseURL,
+          };
+          firebase.initializeApp(config);  
+        });
     },
     appendFirebaseScriptTag: function() {
-      var scriptElem = document.createElement('script');
-      scriptElem.setAttribute('src', 'https://www.gstatic.com/firebasejs/5.5.6/firebase-app.js');
-      scriptElem.onload = function() {
-        GoogleFirebase.appendFirebaseDatabaseScriptTab();
-      };
-      document.head.appendChild(scriptElem);
+      return util.loadJSScript('https://www.gstatic.com/firebasejs/5.5.6/firebase-app.js', {})
+        .then(GoogleFirebase.appendFirebaseDatabaseScriptTab);
     },
     listenForOrderDocumentChange: function(orderID) {
       return new kintone.Promise(function(resolve, reject) {
@@ -245,19 +266,12 @@
         });
     },
     handleShowShipperMap: function(event) {
-      var mapOptions = {
-        zoom: 12,
-        center: {lat: kintoneApp.DEFAULT_LAT, lng: kintoneApp.DEFAULT_LAT},
-        mapTypeControl: true,
-      };
+      var defaultLocation = {lat: kintoneApp.DEFAULT_LAT, lng: kintoneApp.DEFAULT_LAT};
       var isMarker = false;
       var mapContainer;
-      GoogleMap.getBrowserLocation()
-        .then(function(locationData) {
-          mapOptions.center = {
-            lat: locationData.lat,
-            lng: locationData.lng
-          };
+      GoogleMap.getBrowserLocation(defaultLocation)
+        .then(GoogleMap.buildMapOption)
+        .then(function(mapOptions) {
           mapContainer = document.getElementById(kintoneApp.SHIPPER_MAP_ID);
           GoogleMap.renderMap(mapContainer, mapOptions);
         })
