@@ -4,8 +4,8 @@
 
   // USER CUSTOM API KEY
   var GOOGLE_API_KEY = 'AIzaSyBnUFGbu9xqETENEGAKwVTVvx2Jd61lfi0';
-  var DATABASE_NAME = 'cybozu-learnin-1539855411010';
-  var DOCUMENT_GROUP = 'shipperLocation';
+  var FIREBASE_DB_NAME = 'cybozu-learnin-1539855411010';
+  var FIREBASE_DOCUMENT_GROUP = 'shipperLocation';
 
   // ------------------
   var GoogleMap = {
@@ -17,8 +17,6 @@
     map: null,
     marker: null,
     shipperMarker: {},
-    iconWidth: 20,
-    iconHeight: 32,
     markerIcon: null,
     buildDistanceMaxtrixPath: function(data) {
       data.origin = encodeURI(data.origin);
@@ -46,7 +44,7 @@
       var url = 'https://maps.googleapis.com/maps/api/geocode/json?address=' + encodeURI(address) + '&key=' + GoogleMap.key;
       return kintone.proxy(url, 'GET', {}, {})
         .then(function(response) {
-          if (response[1] === handleKintoneEvent.HTTP_STATUS_SUCCESS) {
+          if (response[1] === kintoneApp.HTTP_STATUS_SUCCESS) {
             resultFromGoogleAPI = JSON.parse(response[0]);
             event.record.location = resultFromGoogleAPI.results[0].geometry.location;
           }
@@ -169,7 +167,7 @@
       delete event.record.location;
       return firebase.database().ref(recordURL).set({
         location: locationData,
-        status: handleKintoneEvent.STATUS_PENDING
+        status: kintoneApp.STATUS_PENDING
       }).then(function(res) {
         return event;
       }).catch(function(err) {
@@ -187,7 +185,7 @@
   };
 
   // ------------------
-  var handleKintoneEvent = {
+  var kintoneApp = {
     SHOW_EVENT_LIST: [
       'app.record.detail.show'
     ],
@@ -214,7 +212,7 @@
       return {
         origin: record.store_address.value,
         destination: record.address.value,
-        travelMode: handleKintoneEvent.TRAVEL_MODE
+        travelMode: kintoneApp.TRAVEL_MODE
       };
     },
     fetchRecords: function(appId, opt_offset, opt_limit, opt_records) {
@@ -225,7 +223,7 @@
       return kintone.api('/k/v1/records', 'GET', params).then(function(resp) {
         allRecords = allRecords.concat(resp.records);
         if (resp.records.length === limit) {
-          return handleKintoneEvent.fetchRecords(appId, offset + limit, limit, allRecords);
+          return kintoneApp.fetchRecords(appId, offset + limit, limit, allRecords);
         }
         return allRecords;
       });
@@ -239,7 +237,7 @@
           }
           if (isMarker) {
             GoogleMap.showMarker(location);
-          } else if (snapshot.status === handleKintoneEvent.STATUS_SHIPPING) {
+          } else if (snapshot.status === kintoneApp.STATUS_SHIPPING) {
             GoogleMap.showShipperMarker(recordID, location);
           } else {
             GoogleMap.removeShipperMarker(recordID);
@@ -249,7 +247,7 @@
     handleShowShipperMap: function(event) {
       var mapOptions = {
         zoom: 12,
-        center: {lat: handleKintoneEvent.DEFAULT_LAT, lng: handleKintoneEvent.DEFAULT_LAT},
+        center: {lat: kintoneApp.DEFAULT_LAT, lng: kintoneApp.DEFAULT_LAT},
         mapTypeControl: true,
       };
       var isMarker = false;
@@ -260,15 +258,15 @@
             lat: locationData.lat,
             lng: locationData.lng
           };
-          mapContainer = document.getElementById(handleKintoneEvent.SHIPPER_MAP_ID);
+          mapContainer = document.getElementById(kintoneApp.SHIPPER_MAP_ID);
           GoogleMap.renderMap(mapContainer, mapOptions);
         })
         .then(function() {
-          return handleKintoneEvent.fetchRecords(kintone.app.getId());
+          return kintoneApp.fetchRecords(kintone.app.getId());
         })
         .then(function(records) {
           records.forEach(function(record) {
-            handleKintoneEvent.listenForLocationFromFirebase(record.$id.value, isMarker);
+            kintoneApp.listenForLocationFromFirebase(record.$id.value, isMarker);
           });
         })
         .catch(function(error) {
@@ -278,15 +276,15 @@
     },
     handleShowEvent: function(event) {
       var record = event.record;
-      var blankSpaceForMap = kintone.app.record.getSpaceElement(handleKintoneEvent.BLANK_SPACE_FOR_MAP_DETAIL_VIEW);
+      var blankSpaceForMap = kintone.app.record.getSpaceElement(kintoneApp.BLANK_SPACE_FOR_MAP_DETAIL_VIEW);
       var mapOptions = {
         zoom: 14
       };
       var isMarker = true;
-      var routeOptions = handleKintoneEvent.getRouteOptions(record);
+      var routeOptions = kintoneApp.getRouteOptions(record);
       GoogleMap.renderMap(blankSpaceForMap, mapOptions);
       GoogleMap.drawRoute(routeOptions);
-      handleKintoneEvent.listenForLocationFromFirebase(kintone.app.record.getId(), isMarker);
+      kintoneApp.listenForLocationFromFirebase(kintone.app.record.getId(), isMarker);
     },
     getLocationData: function(record) {
       return {
@@ -308,14 +306,14 @@
       var resultFromGoogleAPI;
       return kintone.proxy(GoogleMap.buildGoogleMapURL(locationData), 'GET', {}, {})
         .then(function(response) {
-          if (response[1] === handleKintoneEvent.HTTP_STATUS_SUCCESS) {
+          if (response[1] === kintoneApp.HTTP_STATUS_SUCCESS) {
             resultFromGoogleAPI = JSON.parse(response[0]);
-            return handleKintoneEvent.calculatePriceFromDistance(resultFromGoogleAPI, event);
+            return kintoneApp.calculatePriceFromDistance(resultFromGoogleAPI, event);
           }
           return event;
         })
         .catch(function(err) {
-          event.error = 'Something wrong with Google';
+          event.error = err;
           return event;
         });
     },
@@ -329,17 +327,17 @@
     },
     handleSubmitEvent: function(event) {
       var record = event.record;
-      var locationData = handleKintoneEvent.getLocationData(record);
-      return handleKintoneEvent.calculatePrice(event, locationData);
+      var locationData = kintoneApp.getLocationData(record);
+      return kintoneApp.calculatePrice(event, locationData);
     },
     init: function() {
-      GoogleFirebase.init(GOOGLE_API_KEY, DATABASE_NAME, DOCUMENT_GROUP);
+      GoogleFirebase.init(GOOGLE_API_KEY, FIREBASE_DB_NAME, FIREBASE_DOCUMENT_GROUP);
       GoogleMap.init(GOOGLE_API_KEY)
         .then(function() {
-          kintone.events.on(handleKintoneEvent.SHOW_EVENT_LIST, handleKintoneEvent.handleShowEvent);
-          kintone.events.on(handleKintoneEvent.SUBMIT_EVENT_LIST, handleKintoneEvent.handleSubmitEvent);
-          kintone.events.on(handleKintoneEvent.SHOW_SHIPPER_MAP_EVENT_LIST, handleKintoneEvent.handleShowShipperMap);
-          kintone.events.on(handleKintoneEvent.SUBMIT_SUCCESS_EVENT_LIST, handleKintoneEvent.handleSubmitSuccessEvent);
+          kintone.events.on(kintoneApp.SHOW_EVENT_LIST, kintoneApp.handleShowEvent);
+          kintone.events.on(kintoneApp.SUBMIT_EVENT_LIST, kintoneApp.handleSubmitEvent);
+          kintone.events.on(kintoneApp.SHOW_SHIPPER_MAP_EVENT_LIST, kintoneApp.handleShowShipperMap);
+          kintone.events.on(kintoneApp.SUBMIT_SUCCESS_EVENT_LIST, kintoneApp.handleSubmitSuccessEvent);
         })
         .catch(function(error) {
 
@@ -348,5 +346,5 @@
   };
 
   // MAIN
-  handleKintoneEvent.init();
+  kintoneApp.init();
 })();
