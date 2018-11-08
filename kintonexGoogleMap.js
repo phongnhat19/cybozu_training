@@ -131,6 +131,19 @@
         });
       });
     },
+    updateMarker: function(recordID, snapshot, isMarker) {
+      var location = null;
+      if (snapshot) {
+        location = snapshot.location;
+      }
+      if (isMarker) {
+        GoogleMap.showMarker(location);
+      } else if (snapshot.status === kintoneApp.STATUS_SHIPPING) {
+        GoogleMap.showShipperMarker(recordID, location);
+      } else {
+        GoogleMap.removeShipperMarker(recordID);
+      }
+    },
     getBrowserLocation: function(defaultLocation) {
       return new kintone.Promise(function(resolve, reject) {
         if (navigator.geolocation) {
@@ -172,13 +185,11 @@
       return util.loadJSScript('https://www.gstatic.com/firebasejs/5.5.6/firebase-app.js', {})
         .then(GoogleFirebase.appendFirebaseDatabaseScriptTab);
     },
-    listenForOrderDocumentChange: function(orderID) {
-      return new kintone.Promise(function(resolve, reject) {
-        var recordURL = GoogleFirebase.documentGroup + '/' + orderID;
-        var dbRef = firebase.database().ref(recordURL);
-        dbRef.on('value', function(snapshot) {
-          resolve(snapshot.val());
-        });
+    listenForOrderDocumentChange: function(orderID, isMarker, updateMarker) {
+      var recordURL = GoogleFirebase.documentGroup + '/' + orderID;
+      var dbRef = firebase.database().ref(recordURL);
+      dbRef.on('value', function(snapshot) {
+        updateMarker(orderID, snapshot.val(), isMarker);
       });
     },
     setLocation: function(event) {
@@ -201,7 +212,7 @@
       GoogleFirebase.databaseName = databaseName;
       GoogleFirebase.databaseURL = 'https://' + databaseName + '.firebaseio.com';
       GoogleFirebase.documentGroup = documentGroup;
-      GoogleFirebase.appendFirebaseScriptTag();
+      return GoogleFirebase.appendFirebaseScriptTag();
     }
   };
 
@@ -250,20 +261,7 @@
       });
     },
     listenForLocationFromFirebase: function(recordID, isMarker) {
-      GoogleFirebase.listenForOrderDocumentChange(recordID)
-        .then(function(snapshot) {
-          var location = null;
-          if (snapshot) {
-            location = snapshot.location;
-          }
-          if (isMarker) {
-            GoogleMap.showMarker(location);
-          } else if (snapshot.status === kintoneApp.STATUS_SHIPPING) {
-            GoogleMap.showShipperMarker(recordID, location);
-          } else {
-            GoogleMap.removeShipperMarker(recordID);
-          }
-        });
+      GoogleFirebase.listenForOrderDocumentChange(recordID, isMarker, GoogleMap.updateMarker);
     },
     handleShowShipperMap: function(event) {
       var defaultLocation = {lat: kintoneApp.DEFAULT_LAT, lng: kintoneApp.DEFAULT_LAT};
